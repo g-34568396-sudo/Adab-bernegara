@@ -1,0 +1,309 @@
+<!DOCTYPE html>
+<html lang="ms">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Tutor AI - Adab Bernegara</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Nunito:wght@400;600;700;800&display=swap" rel="stylesheet">
+    
+    <style>
+        body {
+            font-family: 'Nunito', sans-serif;
+            background-color: #f0fdf4;
+            background-image: radial-gradient(#bbf7d0 1px, transparent 1px);
+            background-size: 20px 20px;
+        }
+
+        /* Scrollbar styling */
+        ::-webkit-scrollbar {
+            width: 6px;
+        }
+        ::-webkit-scrollbar-track {
+            background: transparent;
+        }
+        ::-webkit-scrollbar-thumb {
+            background: #cbd5e1;
+            border-radius: 10px;
+        }
+        ::-webkit-scrollbar-thumb:hover {
+            background: #94a3b8;
+        }
+
+        .chat-bubble-ai {
+            background-color: #ffffff;
+            border: 2px solid #e2e8f0;
+            border-bottom-left-radius: 4px;
+        }
+        
+        .chat-bubble-user {
+            background-color: #22c55e;
+            color: white;
+            border-bottom-right-radius: 4px;
+        }
+
+        .typing-indicator span {
+            display: inline-block;
+            width: 8px;
+            height: 8px;
+            background-color: #94a3b8;
+            border-radius: 50%;
+            margin: 0 2px;
+            animation: bounce 1.4s infinite ease-in-out both;
+        }
+
+        .typing-indicator span:nth-child(1) { animation-delay: -0.32s; }
+        .typing-indicator span:nth-child(2) { animation-delay: -0.16s; }
+
+        @keyframes bounce {
+            0%, 80%, 100% { transform: scale(0); }
+            40% { transform: scale(1); }
+        }
+
+        .markdown-body p { margin-bottom: 0.5rem; }
+        .markdown-body p:last-child { margin-bottom: 0; }
+        .markdown-body strong { font-weight: 700; color: #166534; }
+        .chat-bubble-user .markdown-body strong { color: #dcfce7; }
+        .markdown-body ul { list-style-type: disc; margin-left: 1.5rem; margin-bottom: 0.5rem; }
+    </style>
+</head>
+<body class="h-screen w-screen overflow-hidden flex flex-col items-center justify-center p-0 sm:p-4">
+
+    <div class="w-full h-full max-w-2xl bg-white sm:rounded-3xl shadow-2xl flex flex-col overflow-hidden border border-gray-200">
+        
+        <!-- Header -->
+        <div class="bg-gradient-to-r from-green-600 to-emerald-500 text-white p-4 flex items-center shadow-md z-10">
+            <div class="w-12 h-12 bg-white rounded-full flex items-center justify-center text-2xl mr-4 shadow-inner border-2 border-green-200">
+                🤖
+            </div>
+            <div>
+                <h1 class="text-xl font-bold">Cikgu AI</h1>
+                <p class="text-sm text-green-100 opacity-90">Tutor Peribadi 6 Bestari • Adab Bernegara</p>
+            </div>
+            <button onclick="startSession()" class="ml-auto bg-white/20 hover:bg-white/30 text-white rounded-full p-2 px-4 text-sm font-semibold transition backdrop-blur-sm" title="Mula Semula">
+                <i class="fas fa-sync-alt mr-1"></i> Mula Semula
+            </button>
+        </div>
+
+        <!-- Chat Area -->
+        <div id="chat-container" class="flex-1 overflow-y-auto p-4 bg-slate-50 space-y-4">
+            <!-- Messages will be injected here -->
+        </div>
+
+        <!-- Loading Indicator -->
+        <div id="loading-indicator" class="hidden p-4 bg-slate-50">
+            <div class="flex items-end max-w-[80%]">
+                <div class="w-8 h-8 rounded-full bg-green-100 flex items-center justify-center text-sm mr-2 flex-shrink-0 border border-green-200">🤖</div>
+                <div class="bg-white px-4 py-3 rounded-2xl rounded-bl-none shadow-sm border border-gray-100 typing-indicator">
+                    <span></span><span></span><span></span>
+                </div>
+            </div>
+        </div>
+
+        <!-- Input Area -->
+        <div class="p-4 bg-white border-t border-gray-200 z-10">
+            <form id="chat-form" class="flex items-center space-x-2">
+                <input type="text" id="user-input" class="flex-1 bg-gray-100 border-transparent focus:bg-white focus:border-green-500 focus:ring-2 focus:ring-green-200 rounded-full px-5 py-3 outline-none transition" placeholder="Taip jawapan atau soalan anda di sini..." autocomplete="off">
+                <button type="submit" id="send-btn" class="bg-green-500 hover:bg-green-600 text-white rounded-full w-12 h-12 flex items-center justify-center shadow-md transition disabled:opacity-50 disabled:cursor-not-allowed">
+                    <i class="fas fa-paper-plane"></i>
+                </button>
+            </form>
+            <div class="text-center mt-2">
+                <span class="text-[10px] text-gray-400">Tutor AI boleh membuat kesilapan. Sila semak jawapan dengan buku teks.</span>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        const chatContainer = document.getElementById('chat-container');
+        const chatForm = document.getElementById('chat-form');
+        const userInput = document.getElementById('user-input');
+        const sendBtn = document.getElementById('send-btn');
+        const loadingIndicator = document.getElementById('loading-indicator');
+
+        // Gemini API Configuration
+        const apiKey = ""; // Canvas akan mengisi kunci API ini secara automatik
+        const apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-3-flash-preview:generateContent?key=${apiKey}`;
+
+        // Arahan sistem (System Prompt) mengikut arahan pengguna
+        const systemPrompt = `Anda ialah Cikgu AI, seorang tutor peribadi yang mesra dan ceria untuk murid kelas 6 Bestari (berumur 12 tahun).
+Topik ulang kaji: "Adab Bernegara" (Pendidikan Islam).
+
+NOTA PANDUAN UNTUK ANDA:
+- Pengertian: Mempunyai negara, merasai diri sebagai sebahagian daripadanya dan bertanggungjawab memelihara kesejahteraan.
+- Hukum: Wajib.
+- Dalil: Hadis riwayat Tirmidhi ("Betapa baiknya kamu sebagai sebuah negara...").
+- Sirah: Mencintai negara (Makkah/Madinah), bekerjasama memajukan negara, pelihara kesejahteraan (Piagam Madinah), pertahankan warisan (Perjanjian Aqabah), sanggup berkorban (Perjanjian Hudaibiyah).
+- Ciri-ciri: Bangga, patuh raja, bersopan, hargai sejarah, pertahan negara, hormat agama lain, jaga perlembagaan.
+- Kepentingan: Reda Allah, lahir warganegara berkorban, didik sikap tanggungjawab, negara maju harmoni.
+- Akibat Abai: Murka Allah, tidak patriotik, masyarakat pecah belah, ekonomi tidak stabil.
+
+ARAHAN KETAT ANDA:
+1. Tanya SATU soalan sahaja pada satu masa.
+2. JANGAN TERUS BERI JAWAPAN. Biar murid berfikir.
+3. Berikan PETUNJUK (hint) jika jawapan murid salah atau kurang tepat.
+4. Terangkan konsep menggunakan CONTOH KEHIDUPAN SEBENAR yang mudah difahami kanak-kanak 12 tahun (contoh: permainan bola sepak, peraturan sekolah, gotong-royong, dll).
+5. Tingkatkan KESUKARAN secara berperingkat (Mula dari pengertian/hukum -> Ciri-ciri -> Sirah -> KBAT/Kesan).
+6. Puji murid bila mereka jawab dengan betul (Gunakan emoji).
+7. Selepas murid menjawab 4-5 soalan, atau jika murid minta berhenti, berikan "LAPORAN PENGUASAAN MURID" yang mengandungi: Tahap Penguasaan, Kekuatan, dan Aspek perlu diperbaiki.
+8. Gunakan bahasa Melayu yang mesra, santai tapi sopan, sesuai untuk budak 12 tahun.
+
+Mulakan perbualan dengan menyapa murid, beritahu tujuan anda, dan terus tanya soalan pertama yang paling mudah.`;
+
+        let chatHistory = [];
+
+        // Fungsi penukar teks Markdown ringkas ke HTML
+        function parseMarkdown(text) {
+            let html = text.replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>'); // Bold
+            html = html.replace(/\*(.*?)\*/g, '<em>$1</em>'); // Italic
+            html = html.replace(/\n/g, '<br>'); // Newlines
+            // Simple list handling
+            html = html.replace(/(?:^|<br>)- (.*?)(?=<br>|$)/g, '<br>• $1'); 
+            return `<div class="markdown-body">${html}</div>`;
+        }
+
+        // Fungsi menambah buih sembang ke UI
+        function addMessageToUI(text, sender) {
+            const wrapper = document.createElement('div');
+            wrapper.className = `flex ${sender === 'user' ? 'justify-end' : 'justify-start'} w-full animate-[fadeIn_0.3s_ease-out]`;
+            
+            let icon = '';
+            let bubbleClass = '';
+            
+            if (sender === 'model') {
+                icon = `<div class="w-8 h-8 rounded-full bg-green-100 flex items-center justify-center text-sm mr-2 flex-shrink-0 border border-green-200 mt-auto">🤖</div>`;
+                bubbleClass = 'chat-bubble-ai px-4 py-3 rounded-2xl rounded-bl-none shadow-sm text-gray-800 max-w-[85%] sm:max-w-[75%]';
+            } else {
+                icon = ''; // No icon for user to keep it clean
+                bubbleClass = 'chat-bubble-user px-4 py-3 rounded-2xl rounded-br-none shadow-md max-w-[85%] sm:max-w-[75%]';
+            }
+
+            wrapper.innerHTML = `
+                ${icon}
+                <div class="${bubbleClass}">
+                    ${parseMarkdown(text)}
+                </div>
+            `;
+            
+            chatContainer.appendChild(wrapper);
+            scrollToBottom();
+        }
+
+        function scrollToBottom() {
+            chatContainer.scrollTop = chatContainer.scrollHeight;
+        }
+
+        async function callGeminiAPI(userText) {
+            // Update UI to show loading
+            loadingIndicator.classList.remove('hidden');
+            userInput.disabled = true;
+            sendBtn.disabled = true;
+
+            // Prepare history for the API
+            const contents = chatHistory.map(msg => ({
+                role: msg.role,
+                parts: [{ text: msg.parts[0].text }]
+            }));
+
+            // If it's a user message, add it to the contents
+            if (userText) {
+                contents.push({
+                    role: "user",
+                    parts: [{ text: userText }]
+                });
+            }
+
+            const payload = {
+                systemInstruction: { parts: [{ text: systemPrompt }] },
+                contents: contents,
+            };
+
+            try {
+                // Implement exponential backoff for fetch
+                let retries = 3;
+                let delay = 1000;
+                let response;
+
+                while (retries > 0) {
+                    response = await fetch(apiUrl, {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify(payload)
+                    });
+
+                    if (response.ok) break;
+                    
+                    retries--;
+                    if (retries === 0) throw new Error(`API Error: ${response.status}`);
+                    await new Promise(resolve => setTimeout(resolve, delay));
+                    delay *= 2;
+                }
+
+                const result = await response.json();
+                
+                if (result.candidates && result.candidates[0].content) {
+                    const aiResponse = result.candidates[0].content.parts[0].text;
+                    
+                    // Update internal history
+                    if (userText) {
+                        chatHistory.push({ role: "user", parts: [{ text: userText }] });
+                    }
+                    chatHistory.push({ role: "model", parts: [{ text: aiResponse }] });
+                    
+                    // Hide loading and show response
+                    loadingIndicator.classList.add('hidden');
+                    addMessageToUI(aiResponse, 'model');
+                } else {
+                    throw new Error("Invalid response structure");
+                }
+            } catch (error) {
+                loadingIndicator.classList.add('hidden');
+                addMessageToUI("Maaf, Cikgu AI sedang mengalami sedikit masalah teknikal. Boleh cuba taip sekali lagi? 😅", 'model');
+            } finally {
+                userInput.disabled = false;
+                sendBtn.disabled = false;
+                userInput.focus();
+            }
+        }
+
+        // Event listener for form submission
+        chatForm.addEventListener('submit', (e) => {
+            e.preventDefault();
+            const text = userInput.value.trim();
+            if (!text) return;
+
+            // Add user message to UI
+            addMessageToUI(text, 'user');
+            userInput.value = '';
+            
+            // Call API
+            callGeminiAPI(text);
+        });
+
+        // Initialize session
+        function startSession() {
+            chatContainer.innerHTML = '';
+            chatHistory = [];
+            userInput.value = '';
+            
+            // Call API without user input to trigger the AI's first greeting based on System Prompt
+            callGeminiAPI("Sila mulakan sesi ulang kaji sekarang mengikut arahan sistem anda.");
+        }
+
+        // Add simple CSS animation for fade in
+        const style = document.createElement('style');
+        style.innerHTML = `
+            @keyframes fadeIn {
+                from { opacity: 0; transform: translateY(10px); }
+                to { opacity: 1; transform: translateY(0); }
+            }
+        `;
+        document.head.appendChild(style);
+
+        // Start automatically on load
+        window.onload = startSession;
+
+    </script>
+</body>
+</html>
